@@ -1,0 +1,893 @@
+---
+title: "centromeres"
+author: "Jesse Poland"
+date: "7/17/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+rm(list=ls())  ## clear out workspace
+dev.off()
+
+```
+
+
+```{r}
+
+setwd("/Users/jpoland/Documents/centromeres/")
+
+```
+
+
+
+```{r}
+## make bed file for counting bins  ## make all chromosomes with bins up to 1GB 
+
+chrs = c('chr1A', 'chr1B', 'chr1D', 'chr2A', 'chr2B', 'chr2D', 'chr3A', 'chr3B', 'chr3D', 'chr4A', 'chr4B', 'chr4D', 'chr5A', 'chr5B', 'chr5D', 'chr6A', 'chr6B', 'chr6D', 'chr7A', 'chr7B', 'chr7D', 'chrUn', 'chr1R')
+
+options("scipen"=100)
+bin.size = 100000
+n.bins = 1E9/bin.size
+chrom = rep(chrs, each=n.bins)	
+chromSTART = rep(1+c(0:(n.bins-1))*bin.size, times=length(chrs) )	
+chromEND = rep((1:n.bins)*bin.size, times=length(chrs) )	
+head(chromSTART)
+head(chromEND)
+
+bin.bed = data.frame(chrom, chromSTART, chromEND)
+## bin.bed = format(bin.bed,scientific=FALSE)
+head(bin.bed)
+write.table(bin.bed, file="chr.wheat.1R-100Kb-bin.bed", row.names=FALSE, quote=FALSE, sep="\t")
+
+```
+
+
+
+```{r}
+## short function to make standard normal
+sdnorm = function(x){
+  x = (x-mean(x))/sd(x)
+  return(x)
+}
+
+sdmax = function(x){
+  x = x-mean(x)
+  x = x/max(x)
+  return(x)
+}
+
+```
+
+
+
+```{r}
+
+getchip = function(file){
+  data = read.table(file)
+  colnames(data)=c('chr', 'start', 'end', 'count')
+  data = data[data$count!=0, ]
+  data$norm.cnt = sdnorm(data$count)
+  print(head(data))
+  return(data)
+}
+
+
+csg.chip = getchip('chinesespring-guo_chinesespringv1.intersect.bed') ## data from Guo et.al. 2016
+csk.chip = getchip('chinesespring-koo_chinesespringv1.intersect.bed') ## new data from Koo et al. 
+jagger.chip = getchip("jagger-koo_jagger.intersect.bed")
+
+arina.chip = getchip("arina.intersect.bed")
+lancer.chip = getchip("lancer.intersect.bed")
+landmark.chip = getchip("landmark.intersect.bed")
+julius.chip = getchip("julius.intersect.bed")
+mace.chip = getchip("mace.intersect.bed")
+mattis.chip = getchip("mattis.intersect.bed")
+norin61.chip = getchip("norin61.intersect.bed")
+stanley.chip = getchip("stanley.intersect.bed")
+
+# other alignments to v2 reference
+# '/Users/jpoland/Documents/centromeres/chinesespring-guo_chinesespringv2.intersect.bed'
+# '/Users/jpoland/Documents/centromeres/chinesespring-koo_chinesespringv2.intersect.bed'
+# 
+
+plot(csg.chip$chr)
+plot(mattis.chip$chr, col='green', add=TRUE, density=40)
+plot(arina.chip$chr, col='blue', add=TRUE, density=25, angle=135)
+
+
+
+```
+
+
+
+```{r}
+
+## make list of each dataset
+cs.guo = list(name='Chinese Spring v1', string='Chinese_Spring', chip=csg.chip)
+cs.koo = list(name='Chinese Spring v1', string='Chinese_Spring', chip=csk.chip)
+
+
+
+arina = list(name='ArinaLrFor', string='ArinaLrFor', chip=arina.chip)
+jagger = list(name='Jagger', string='Jagger', chip=jagger.chip)
+julius = list(name='Julius', string='Julius', chip=julius.chip)
+lancer = list(name='Lancer', string='Long_Reach_Lancer', chip=lancer.chip)
+landmark = list(name='CDC Landmark', string='CDC_Landmark', chip=landmark.chip)
+mace = list(name='Mace', string='Mace', chip=mace.chip)
+mattis = list(name='SY Mattis', string='SY_Mattis', chip=mattis.chip)
+norin61 = list(name='Norin 61', string='Norin_61', chip=norin61.chip)
+stanley = list(name='CDC Stanley', string='CDC_Stanley', chip=stanley.chip)
+
+genomes = list(cs.guo, cs.koo, arina, jagger, julius, lancer, landmark, mace, mattis, norin61, stanley)
+
+
+# chipseq on other genomes pending
+# mattis = list(name="SY Mattis", string="SY_Mattis")
+
+
+
+
+```
+
+
+
+```{r}
+## function to get subset of data for only one chromosome
+chip.sub = function(g, chr){
+  g$chip = g$chip[g$chip$chr==chr, ]
+  return(g)
+}
+
+```
+
+
+```{r}
+
+## read NUCmer output delta file; CODE FROM: https://jmonlong.github.io/Hippocamplus/2017/09/19/mummerplots-with-ggplot2/
+
+library(dplyr)
+library(magrittr)
+library(GenomicRanges)
+library(knitr)
+library(ggplot2)
+library(tidyr)
+
+readDelta <- function(deltafile){
+  lines = scan(deltafile, 'a', sep='\n', quiet=TRUE)
+  lines = lines[-1]
+  lines.l = strsplit(lines, ' ')
+  lines.len = lapply(lines.l, length) %>% as.numeric
+  lines.l = lines.l[lines.len != 1]
+  lines.len = lines.len[lines.len != 1]
+  head.pos = which(lines.len == 4)
+  head.id = rep(head.pos, c(head.pos[-1], length(lines.l)+1)-head.pos)
+  mat = matrix(as.numeric(unlist(lines.l[lines.len==7])), 7)
+  res = as.data.frame(t(mat[1:5,]))
+  colnames(res) = c('rs','re','qs','qe','error')
+  res$qid = unlist(lapply(lines.l[head.id[lines.len==7]], '[', 2))
+  res$rid = unlist(lapply(lines.l[head.id[lines.len==7]], '[', 1)) %>% gsub('^>', '', .)
+  res$strand = ifelse(res$qe-res$qs > 0, '+', '-')
+  res
+}
+
+
+getmummer = function(g1, g2, chr, chr2=NA){
+  if(!is.na(chr2)){mum = readDelta(paste('delta/', g1$string, ".", chr, ".", g2$string, ".", chr2, ".", 'delta', sep=""))}
+  else{mum = readDelta(paste('delta/', g1$string, ".", g2$string, ".", chr, ".", 'delta', sep=""))}
+  return(mum)
+}
+
+
+
+```
+
+
+
+
+```{r}
+## generic function for plot comparing two genomes
+
+name = function(v){
+  n = deparse(substitute(v))
+  return(n)
+}
+
+# chr='chr4A'
+# g1 = cs.guo
+# g2 = jagger
+# grid=TRUE
+# 
+# chr='chr7B'
+# chr2='chr5B'
+# g1 = mattis
+# g2 = arina
+# grid=TRUE
+# 
+
+
+cen.plot = function(g1, g2, chr, chr2=NA, grid=TRUE){
+
+  mum = getmummer(g1, g2, chr, chr2)
+  # mum = readDelta(paste('/Users/jpoland/Documents/centromeres/delta/', g1$string, ".", g2$string, ".", chr, ".", 'delta', sep=""))
+
+  if(is.na(chr2)){chr2=chr}
+  g1$chip = g1$chip[g1$chip$chr==chr, ]
+  g2$chip = g2$chip[g2$chip$chr==chr2, ]
+  
+  
+  clr = rep.int('black',nrow(mum))
+  clr[mum$strand=="-"]='dark grey'
+  
+  main.lab = if(is.na(chr2)){chr} else {paste(chr,"-",chr2)}
+  
+  plot(mum$rs/1E6, mum$qs/1E6, las=1, col=clr, cex=0.6,  xlab=paste(g1$name, chr, "(Mb)"), ylab=paste(g2$name, chr2,"(Mb)"), main=main.lab, axes='FALSE')
+  axis(side=1, las=1)
+  axis(side=2, las=1)
+  
+  g1.cnt = sdnorm(g1$chip$count)*8 ## scale count data
+  points(y=g1.cnt, x=g1$chip$start/1E6, col='blue', cex=0.8)
+  
+  g2.cnt = sdnorm(g2$chip$count)*8 ## scale count data
+  points(x=g2.cnt, y=g2$chip$start/1E6, col='red', cex=0.8)
+  
+  ## add axis lables
+  # axis(side = 4, labels=c(0,0.5,1.0), at=c(0,100,200), las=1, line=-1)
+  # mtext(side = 4, 'Relative density of CENH3 ChIP-seq', adj=0.1, line=1)
+  # 
+  # axis(side = 3, labels=c(0,0.5,1.0), at=c(0,100,200), las=1, line=-1)
+  # mtext(side = 3, 'Relative density of CENH3 ChIP-seq', adj=0.1, line=1)
+  # 
+
+  sp = smooth.spline(g1.cnt, nknots=1000)
+  # plot(sp$y, type='l')
+  # points(y=sp$y, x=c(1:length(sp$y))/10, col='green', type='l', lwd=3)
+  
+  g1.cent = which.max(sp$y)/10
+  g1.cent.y = which.min(abs(mum$rs/1E6 - g1.cent))
+  lines(x=c(g1.cent,g1.cent), y=c(0, mum$qs[g1.cent.y]/1E6), col='blue', lwd=2, lty=2)
+  print(paste(g1$name, chr, g1.cent, sep=": "))
+
+  sp = smooth.spline(g2.cnt, nknots=1000)
+  # plot(sp$y, type='l')
+  # points(x=sp$y, y=c(1:length(sp$y))/10, col='green', type='l', lwd=3)
+  
+  g2.cent = which.max(sp$y)/10
+  g2.cent.y = which.min(abs(mum$qs/1E6 - g2.cent))
+  lines(y=c(g2.cent,g2.cent), x=c(0, mum$rs[g2.cent.y]/1E6), col='red', lwd=2, lty=2)
+  print(paste(g2$name, chr, g2.cent, sep=": "))
+
+  if(grid){abline(v=c(10:40)*10, h=c(10:40)*10, lty=3, lwd=0.6, col='grey')}
+  
+}
+
+
+```
+
+
+
+
+plots for manuscript
+
+```{r}
+
+pdf("4D_cs-julius.cenplot_v2.pdf") 
+cen.plot(cs.guo, julius, 'chr4D', grid=FALSE)
+dev.off()
+
+pdf("4B_cs-stanley.cenplot_v2.pdf") 
+cen.plot(cs.guo, stanley, 'chr4B', grid=FALSE)
+dev.off()
+
+pdf("5B_cs-julius.cenplot_v2.pdf") 
+cen.plot(cs.guo, julius, 'chr5B', grid=FALSE)
+dev.off()
+
+
+sum(chip.sub(jagger, 'chr1A')$chip$count>0)
+length(chip.sub(jagger, 'chr1A')$chip$count)
+
+
+```
+
+
+
+plots for all chromosomes
+
+```{r}
+
+length(genomes)
+
+pdf("5B_all-genomes.pdf", width=14, height=77) 
+
+par(mfrow=c(11,2))
+for(g in genomes){
+  cen.plot(cs.guo, g, 'chr5B', grid=FALSE)
+  cen.plot(jagger, g, 'chr5B', grid=FALSE)
+ 
+}
+
+pdf("5B_all-genomes.pdf", width=50, height=50) 
+
+par(mfrow=c(11,11))
+for(g in c(1:11)){
+  for(g2 in c(1:11)){
+    cen.plot(genomes[[g]], genomes[[g2]], 'chr5B', grid=FALSE)
+    if(g>=g2){ plot.new() }
+  }
+}
+
+dev.off()
+
+
+
+```
+
+
+
+
+
+estimate centromere size
+
+```{r}
+
+g=julius
+res=data.frame(nrow=length(genomes[[]]$name), ncol=3); colnames(res)=c("name", 'mean', 'norm')
+
+res=data.frame(name=character(), mean=numeric(), norm=numeric())
+
+for(g in genomes){
+  m = sum(g$chip$count > 3*mean(g$chip$count)) /10/21
+  n = ##sum(g$chip$norm.cnt > 3*sd(g$chip$norm.cnt)) /10/21
+  res = rbind(res, data.frame(name=g$name, mean=m, norm=n))
+}
+
+
+
+
+```
+
+
+
+get centromere position for each genome / chromosome
+
+```{r}
+
+g=julius
+res=matrix(nrow=0, ncol=22); 
+colnames(res)=c("name", chrs[1:21])
+
+
+for(g in genomes){
+  res.tmp = data.frame(name=g$name)
+  for(c in chrs[1:21]){
+    g.sub= chip.sub(g, c)
+    sp = smooth.spline(g.sub$chip$count, nknots=1000)
+    cent.pos = which.max(sp$y)/10
+    res.tmp = cbind(res.tmp, cent.pos)
+    print(paste(g$string, c, cent.pos))
+  }
+
+  res = rbind(res, res.tmp)
+}
+
+
+write.csv(res, file="centromere-positions.csv")
+
+```
+
+
+
+
+
+THEORY: (1) functional centromers are determined by modified histone CENH3, (2) chromosome immuno precipitation (CHIP) using CENH3 antibody preferentiallys bind centromeric DNA (3) centromere positions are in middle of chromosome
+HYPOTHESIS: Dal-Hoe generated good chipseq data and Jesse did analysis correctly 
+PREDICTION: (a) plot of chromosome bins of sequence read counts across the whole genome will show a peak around the middle of each chromosome (21 chromosomes = 21 peaks) 
+
+alternative model:  chipseq didn't work / analysis is wrong / data is not good
+
+
+
+
+(b) highly enriched for centromeric sequence
+
+
+```{r}
+## quick check chipseq data
+
+
+plot(cs.guo$chip$count)
+
+plot(cs.koo$chip$count, col=c('red', 'blue', 'light green'))
+
+plot(jagger$chip$count, col=as.factor(substring(jagger$chip$chr,5)))
+
+plot(julius$chip$count, col=as.factor(substring(julius$chip$chr,5)), ylab='Read Count per Mb')
+
+plot(stanley$chip$count, col=as.factor(substring(stanley$chip$chr,5)))
+
+plot(mattis$chip$count, col=as.factor(substring(mattis$chip$chr,5)))
+
+plot(arina$chip$count, col=as.factor(substring(arina$chip$chr,5)))
+
+```
+
+
+
+THEORY:  (1) functional centromere positions are stably inheritied
+HYPOTHESIS: functional centromere position in wheat var. Chinese Spring is stable through generations  
+PREDICTION: (a) replicated assessment of same variety (from different seed stocks) will show enrichment in same bins on physical map  (b) peak of CENH3 chipseq for Chinese Spring from Guo et al. (2016) compared to Koo et al. (new data) will be in same bin(s) on RefSeqV1
+
+alternative model: functional centromere positions are NOT stably inherited
+
+
+
+```{r}
+c = 'chr1A'
+sub.guo = chip.sub(cs.guo, c)
+sub.koo = chip.sub(cs.koo, c)
+sub.julius = chip.sub(julius, c)
+sub.stanley = chip.sub(stanley, c)
+
+plot(sub.guo$chip$start/1E6, sub.guo$chip$norm.cnt, main=c, ylab="normalized read count (Mb)", xlab='position (Mb)', cex=0.8)
+
+points(sub.koo$chip$start/1E6,  sub.koo$chip$norm.cnt, col='green', cex=0.8)
+
+
+## zoom view
+
+## 2B is interesting c(340,360)
+
+plot(sub.guo$chip$start/1E6, sub.guo$chip$norm.cnt, main=c, ylab="normalized read count (Mb)", xlab='position (Mb)', cex=0.8, xlim=c(200,230) , type='b')
+
+points(sub.koo$chip$start/1E6,  sub.koo$chip$norm.cnt, col='green', cex=0.8, type='b')
+
+points(sub.julius$chip$start/1E6,  sub.julius$chip$norm.cnt, col='blue', cex=0.8, type='b')
+
+points(sub.stanley$chip$start/1E6,  sub.stanley$chip$norm.cnt, col='red', cex=0.8, type='b')
+
+g = genomes[[1]]
+
+pdf('/Users/jpoland/Documents/centromeres/chr1A.pdf', width=7, height=30)
+par(mfrow=c(12,1))
+x.range = c(200,230)
+plot(sub.guo$chip$start/1E6, sub.guo$chip$norm.cnt, main=c, ylab="normalized read count (Mb)", xlab='position (Mb)', cex=0.8, xlim=x.range , type='b')
+
+for (g in genomes){
+  sub.g = chip.sub(g, c)
+  plot(sub.g$chip$start/1E6,  sub.g$chip$norm.cnt, col='black', xlim=x.range, cex=0.8, type='b', main=g$name, ylab="normalized read count (Mb)", xlab='position (Mb)')
+}
+
+dev.off()
+
+```
+
+
+
+
+
+```{r}
+
+c = 'chr2D'
+sub.guo = chip.sub(cs.guo, c)
+sub.jagger = chip.sub(jagger, c)
+
+plot(sub.guo$chip$start/1E6, sub.guo$chip$norm.cnt, main=c, ylab="normalized read count (Mb)", xlab='position (Mb)', cex=0.8)
+
+points(sub.jagger$chip$start/1E6,  sub.jagger$chip$norm.cnt, col='green', cex=0.8)
+
+
+cen.plot(cs.guo, jagger, 'chr2D', grid=FALSE)
+
+
+
+```
+
+
+
+
+
+THEORY: (1) centromere positions are conserved across homolgous chromosomes of a species
+HYPOTHESIS:  functional centromere position between wheat varieties are at SAME position
+PREDICTION: (a) CENH3 chipseq peak for Chinese Spring WILL BE at same position on physical map as Jagger (b) comparision of chipseq data binned by chromosome bins (100kb) will be enriched for same bins 
+
+
+```{r}
+
+plot(cs.guo$chip$norm.cnt)
+points(jagger$chip$norm.cnt, col='green')
+
+
+```
+
+
+observation:  looks like 4A is not aligned, (tenth peak) inspect this chromosome
+
+```{r}
+
+cs.guo.4A = chip.sub(cs.guo, 'chr2D')  ## subset data to chr4A
+jagger.4A = chip.sub(jagger, 'chr2D')
+
+plot(cs.guo.4A$chip$norm.cnt)
+points(jagger.4A$chip$norm.cnt, col='green')
+
+cen.plot(cs.guo,jagger,'chr2D')
+
+```
+
+
+also check chr6D 
+
+
+```{r}
+
+cs.guo.6D = chip.sub(cs.guo, 'chr6D')  ## subset data to chr4A
+jagger.6D = chip.sub(jagger, 'chr6D')
+
+plot(cs.guo.6D$chip$norm.cnt)
+points(jagger.6D$chip$norm.cnt, col='green')
+
+```
+
+
+also check chr4D 
+
+
+```{r}
+
+cs.guo.4D = chip.sub(cs.guo, 'chr4D')  ## subset data to chr4A
+jagger.4D = chip.sub(jagger, 'chr4D')
+
+plot(cs.guo.4D$chip$norm.cnt)
+points(jagger.4D$chip$norm.cnt, col='green')
+
+```
+
+
+
+(updated) MODEL:  (1) function centromere positions ARE conserved across varieties of the same species at homolgous locations (2) BUT chromosome deletions/inversions (or misoriented assembly) shift the absolute position of the centromere
+HYPOTHESIS:  centromere positions are conserved AT HOMOLGOUS LOCATION between wheat var. Chinese Spring and Jagger
+PREDICTION: (a) CENH3 chipseq peak for Chinese Spring WILL BE at same RELATIVE (HOMOLGOUS) position as Jagger (NEED: alignment on homolgous sequence between genomes)
+
+analysis: mummer alignment between genomes, identify same homolgous sequence of centromere position 
+NOTE: see above functions 
+
+alternative MODEL:  (1) function centromere positions ARE USUALY, BUT NOT ALWAYS conserved across varieties of the same species at homolgous locations
+
+
+Cen4A = shifted relative position due to inversions or misoriented assembly (more likely)
+```{r}
+
+cen.plot(cs.guo, jagger, 'chr4A', NA, TRUE)
+
+
+```
+
+
+Cen6D = shifted relative position due to deletions
+```{r}
+
+cen.plot(cs.guo, jagger, 'chr6D', TRUE)
+
+```
+
+
+Cen4D = ????
+```{r}
+
+cen.plot(cs.guo, cs.koo, 'chr4D')
+
+cen.plot(cs.guo, jagger, 'chr4D')
+
+cen.plot(cs.guo, julius, 'chr4D')
+
+cen.plot(jagger, julius, 'chr4D')
+
+cs.guo.4D = chip.sub(cs.guo, 'chr4D')
+cs.koo.4D = chip.sub(cs.koo, 'chr4D')
+
+
+plot(cs.guo.4D$chip$norm.cnt, xlim=c(1750,1950))
+lines(cs.guo.4D$chip$norm.cnt, col='black')
+lines(cs.koo.4D$chip$norm.cnt, col='red')
+```
+
+Cen1B = maybe shifted between Jagger and Julius
+```{r}
+
+cen.plot(cs.koo, julius, 'chr1B')
+
+cen.plot(cs.guo, jagger, 'chr1B')
+
+cen.plot(jagger, julius, 'chr1B')
+
+```
+
+
+
+
+(updated) MODEL:  (1) function centromere positions ARE GENERALLY conserved across varieties of the same species at homolgous locations (2) chromosome deletions/inversions (or misoriented assembly) shift the absolute position of the centromere  (3) function centromere positions CAN CHANGE TO NON-HOMOLGOUS LOCATION between varieties of the same species
+HYPOTHESIS: (1) MOST centromere positions are conserved at homolgous location between wheat var. Chinese Spring and Jagger, (2) positions of Cen4D IS NOT conserved AT HOMOLGOUS LOCATION between wheat var. Chinese Spring and Jagger
+prediction:  comparision of functional Cen4D position between vars. Chinese Spring and Jagger shows (a) there is colinearity between Chinese Spring chr4D and Jagger chr4D (b) CENH3 chipseq peak at different relative position between vars. Chinese Spring and Jagger. 
+(genome to genome alignment)
+
+
+
+
+
+shifted position due to inversion
+
+
+```{r}
+## make plots for manuscript 
+
+pdf("4B_cs-stanley.cenplot_v2.pdf") 
+cen.plot(cs.koo, stanley, 'chr4B', grid=FALSE)
+dev.off()
+
+pdf("5B_cs-julius.cenplot.pdf") 
+cen.plot(cs.koo, julius, 'chr5B', grid=FALSE)
+dev.off()
+
+
+pdf("4D_cs-jagger.cenplot.pdf") 
+cen.plot(cs.koo, julius, 'chr4D', grid=FALSE)
+dev.off()
+
+
+```
+
+
+
+```{r}
+cen.plot(cs.koo, stanley, 'chr4B', grid=FALSE)
+
+cen.plot(landmark, stanley, 'chr4B', grid=FALSE)
+```
+
+
+
+
+
+
+examine 5B-7B translocation
+
+```{r}
+dev.off()
+
+pdf("5B-7B_cs.guo-arina.pdf") 
+
+cen.plot(cs.guo, arina, 'chr5B')
+abline(v=166, lty=2)
+
+cen.plot(cs.guo, arina, 'chr7B')
+abline(v=325, lty=2)
+
+cen.plot(cs.guo, arina, 'chr5B', 'chr7B')
+abline(v=166, lty=2)
+
+cen.plot(cs.guo, arina, 'chr7B', 'chr5B')
+abline(v=325, lty=2)
+
+dev.off()
+
+
+
+pdf("5B-7B_cs.guo-mattis.pdf") 
+
+cen.plot(cs.guo, mattis, 'chr5B')
+abline(v=166, lty=2)
+
+cen.plot(cs.guo, mattis, 'chr7B')
+abline(v=325, lty=2)
+
+cen.plot(cs.guo, mattis, 'chr5B', 'chr7B')
+abline(v=166, lty=2)
+
+cen.plot(cs.guo, mattis, 'chr7B', 'chr5B')
+abline(v=325, lty=2)
+
+dev.off()
+
+
+
+
+pdf("5B-7B_julius-arina.pdf") 
+
+cen.plot(julius, arina, 'chr5B')
+abline(v=166, lty=2)
+
+cen.plot(julius, arina, 'chr7B')
+abline(v=325, lty=2)
+
+cen.plot(julius, arina, 'chr5B', 'chr7B')
+abline(v=166, lty=2)
+
+cen.plot(julius, arina, 'chr7B', 'chr5B')
+abline(v=325, lty=2)
+
+dev.off()
+
+
+
+pdf("5B-7B_julius-mattis.pdf") 
+
+cen.plot(julius, mattis, 'chr5B')
+abline(v=166, lty=2)
+
+cen.plot(julius, mattis, 'chr7B')
+abline(v=325, lty=2)
+
+cen.plot(julius, mattis, 'chr5B', 'chr7B')
+abline(v=166, lty=2)
+
+cen.plot(julius, mattis, 'chr7B', 'chr5B')
+abline(v=325, lty=2)
+
+dev.off()
+
+
+
+
+
+
+pdf("5B-7B_arina-mattis.cenplot.pdf") 
+cen.plot(arina, mattis, 'chr5B')
+abline(v=157, lty=2)
+
+cen.plot(arina, mattis, 'chr7B')
+abline(v=428, lty=2)
+
+dev.off()
+
+
+#################
+
+
+
+cen.plot(julius, mattis, 'chr5B')
+abline(v=166, lty=2)
+
+cen.plot(julius, mattis, 'chr7B')
+abline(v=325, lty=2)
+
+cen.plot(julius, mattis, 'chr5B', 'chr7B')
+abline(v=157, lty=2)
+
+cen.plot(julius, mattis, 'chr7B', 'chr5B')
+abline(v=325, lty=2)
+
+
+
+
+
+
+cen.plot(mattis, arina, 'chr5B')
+abline(v=157, lty=2)
+abline(h=157, lty=2)
+
+cen.plot(mattis, arina, 'chr7B')
+abline(v=993-428, lty=2)
+
+
+
+cen.plot(cs.guo, arina, 'chr7B')
+
+cen.plot(cs.guo, mattis, 'chr5B')
+cen.plot(cs.guo, mattis, 'chr7B')
+
+
+cen.plot(arina, mattis, 'chr7B')
+
+cen.plot(mattis, stanley, 'chr7B')
+abline(950, b=-1)
+
+cen.plot(mattis, arina, 'chr5B')
+cen.plot(cs.koo, arina, 'chr5B')
+
+
+
+cen.plot(cs.guo, jagger, 'chr5B')
+cen.plot(cs.guo, julius, 'chr5B')
+cen.plot(cs.guo, norin61, 'chr5B')
+cen.plot(cs.guo, stanley, 'chr5B')
+
+
+cen.plot(cs.guo, arina, 'chr3B')
+
+
+
+
+dev.off()
+
+```
+
+
+
+
+```{r}
+
+load("191105.tam112.on.lo7.chr1R.reads.density.random2million.rds")
+
+cs.1B = chip.sub(cs.guo, 'chr1B')
+
+plot(cs.1B$chip$start/1E6, log10(cs.1B$chip$count) )
+
+cen.plot(cs.guo, julius, 'chr1A')
+
+
+
+```
+
+
+
+
+
+map breakpoint of 1B.1R in Larry
+
+```{r}
+
+
+larry = getchip("larry.intersect.bed")
+head(larry)
+
+larry.1B = larry[larry$chr=='chr1B', ]
+larry.1B$count[larry.1B$count>30000] = NA
+
+
+tam112 = getchip("tam112.intersect.bed")
+head(tam112)
+
+tam112.1A = tam112[tam112$chr=='chr1A', ]
+tam112.1A$count[tam112.1A$count>15000] = NA
+
+
+
+plot(larry.1B$start/1E6, larry.1B$count, col='darkgrey')
+plot(larry.1B$start/1E6, larry.1B$count, xlim=c(220,260), pch=16, col=rgb(red=0.1, green=1, blue=0.2, alpha=0.6))
+
+cs.1B = chip.sub(cs.guo, 'chr1B')
+
+points(cs.1B$chip$start/1E6, cs.1B$chip$count, col='darkgrey', cex=0.6)
+
+
+
+
+plot(tam112.1A$start/1E6, tam112.1A$count, col='darkgrey')
+plot(tam112.1A$start/1E6, tam112.1A$count, col='darkgrey', xlim=c(200,230))
+
+cs.1A = chip.sub(cs.guo, 'chr1A')
+points(cs.1A$chip$start/1E6, cs.1A$chip$count, pch=16,  col=rgb(red=1, green=0.2, blue=0.2, alpha=0.6))
+
+
+
+
+
+
+larry.1R = larry[larry$chr=='chr1R', ]
+larry.1R$count[larry.1R$count>25000] = NA
+tam112.1R = tam112[tam112$chr=='chr1R', ]
+tam112.1R$count[tam112.1R$count>10000] = NA
+
+
+plot(larry.1R$start/1E6, larry.1R$count, xlim=c(250,290), pch=16, col=rgb(red=0.2, green=1, blue=0.2, alpha=0.6), xlab='Chr1R (Mb)', ylab='bin count')
+
+
+
+
+points(tam112.1R$start/1E6, tam112.1R$count, pch=16, col=rgb(red=0.1, green=0.1, blue=1, alpha=0.4) )
+
+
+
+```
+
+
+
+
+
+
+
+
