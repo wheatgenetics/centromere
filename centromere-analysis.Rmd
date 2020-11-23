@@ -125,9 +125,6 @@ stanley = list(name='CDC Stanley', string='CDC_Stanley', chip=stanley.chip)
 genomes = list(cs.guo, cs.koo, arina, jagger, julius, lancer, landmark, mace, mattis, norin61, stanley)
 
 
-# chipseq on other genomes pending
-# mattis = list(name="SY Mattis", string="SY_Mattis")
-
 
 
 
@@ -268,6 +265,47 @@ cen.plot = function(g1, g2, chr, chr2=NA, grid=TRUE){
 ```
 
 
+```{r}
+
+## function to plot just centromeric region for given genome with buffer (in Mb) 
+
+genome=cs.guo
+chr='chr4D'
+buffer=10E6
+
+plot.cent = function(genome, chr, buffer){
+  
+  sub = chip.sub(genome, chr)
+  
+  ## get centromere position 
+  cent.pos = c(-buffer,buffer)+sub$chip$start[which.max(sub$chip$norm.cnt)]
+  ##cent.pos = c(-1,1)+sub$chip$start[which.max(sub$chip$norm.cnt)]
+  ##cent.pos = c(-1,1)+13
+  
+  plot(sub$chip$start, sub$chip$norm.cnt, xlim=cent.pos, xlab="Position (Mb)", ylab="CENH3 ChIP-seq enrichment (reads per 1Kb)", cex=0.6, main=paste(sub$name, chr))
+
+  # for(i in 1:length(sub$cento$start)){
+  #   lines(x=c(sub$cento$start[i], sub$cento$end[i]), y=c(-5,-5), col='green', lwd=10, lend='butt')
+  # } 
+  # 
+  # for(i in 1:length(sub$genes$start)){
+  #   lines(x=c(sub$genes$start[i], sub$genes$end[i]), y=c(-8,-8), col='blue', lwd=10, lend='butt')
+  # } 
+
+}
+
+```
+
+
+
+
+```{r}
+
+plot.cent(cs.guo, 'chr4D', 10E6)
+
+
+```
+
 
 
 plots for manuscript
@@ -289,6 +327,7 @@ dev.off()
 
 sum(chip.sub(jagger, 'chr1A')$chip$count>0)
 length(chip.sub(jagger, 'chr1A')$chip$count)
+
 
 
 ```
@@ -335,17 +374,18 @@ estimate centromere size
 ```{r}
 
 g=julius
-res=data.frame(nrow=length(genomes[[]]$name), ncol=3); colnames(res)=c("name", 'mean', 'norm')
+res=data.frame(nrow=length(genomes[[]]$name), ncol=3); colnames(res)=c("name", 'mean', 'nbins')
 
-res=data.frame(name=character(), mean=numeric(), norm=numeric())
+res=data.frame(name=character(), mean=numeric(), nbins=numeric())
 
 for(g in genomes){
+  bins = sum(g$chip$count > 3*mean(g$chip$count))
   m = sum(g$chip$count > 3*mean(g$chip$count)) /10/21
-  n = ##sum(g$chip$norm.cnt > 3*sd(g$chip$norm.cnt)) /10/21
-  res = rbind(res, data.frame(name=g$name, mean=m, norm=n))
+  ## n = ##sum(g$chip$norm.cnt > 3*sd(g$chip$norm.cnt)) /10/21
+  res = rbind(res, data.frame(name=g$name, mean=m, nbins=bins))
 }
 
-
+res
 
 
 ```
@@ -375,9 +415,13 @@ for(g in genomes){
 }
 
 
-write.csv(res, file="centromere-positions.csv")
+write.csv(res, file="centromere-positions_20200529.csv")
 
 ```
+
+
+
+
 
 
 
@@ -743,142 +787,6 @@ abline(v=428, lty=2)
 
 dev.off()
 
-
-#################
-
-
-
-cen.plot(julius, mattis, 'chr5B')
-abline(v=166, lty=2)
-
-cen.plot(julius, mattis, 'chr7B')
-abline(v=325, lty=2)
-
-cen.plot(julius, mattis, 'chr5B', 'chr7B')
-abline(v=157, lty=2)
-
-cen.plot(julius, mattis, 'chr7B', 'chr5B')
-abline(v=325, lty=2)
-
-
-
-
-
-
-cen.plot(mattis, arina, 'chr5B')
-abline(v=157, lty=2)
-abline(h=157, lty=2)
-
-cen.plot(mattis, arina, 'chr7B')
-abline(v=993-428, lty=2)
-
-
-
-cen.plot(cs.guo, arina, 'chr7B')
-
-cen.plot(cs.guo, mattis, 'chr5B')
-cen.plot(cs.guo, mattis, 'chr7B')
-
-
-cen.plot(arina, mattis, 'chr7B')
-
-cen.plot(mattis, stanley, 'chr7B')
-abline(950, b=-1)
-
-cen.plot(mattis, arina, 'chr5B')
-cen.plot(cs.koo, arina, 'chr5B')
-
-
-
-cen.plot(cs.guo, jagger, 'chr5B')
-cen.plot(cs.guo, julius, 'chr5B')
-cen.plot(cs.guo, norin61, 'chr5B')
-cen.plot(cs.guo, stanley, 'chr5B')
-
-
-cen.plot(cs.guo, arina, 'chr3B')
-
-
-
-
-dev.off()
-
-```
-
-
-
-
-```{r}
-
-load("191105.tam112.on.lo7.chr1R.reads.density.random2million.rds")
-
-cs.1B = chip.sub(cs.guo, 'chr1B')
-
-plot(cs.1B$chip$start/1E6, log10(cs.1B$chip$count) )
-
-cen.plot(cs.guo, julius, 'chr1A')
-
-
-
-```
-
-
-
-
-
-map breakpoint of 1B.1R in Larry
-
-```{r}
-
-
-larry = getchip("larry.intersect.bed")
-head(larry)
-
-larry.1B = larry[larry$chr=='chr1B', ]
-larry.1B$count[larry.1B$count>30000] = NA
-
-
-tam112 = getchip("tam112.intersect.bed")
-head(tam112)
-
-tam112.1A = tam112[tam112$chr=='chr1A', ]
-tam112.1A$count[tam112.1A$count>15000] = NA
-
-
-
-plot(larry.1B$start/1E6, larry.1B$count, col='darkgrey')
-plot(larry.1B$start/1E6, larry.1B$count, xlim=c(220,260), pch=16, col=rgb(red=0.1, green=1, blue=0.2, alpha=0.6))
-
-cs.1B = chip.sub(cs.guo, 'chr1B')
-
-points(cs.1B$chip$start/1E6, cs.1B$chip$count, col='darkgrey', cex=0.6)
-
-
-
-
-plot(tam112.1A$start/1E6, tam112.1A$count, col='darkgrey')
-plot(tam112.1A$start/1E6, tam112.1A$count, col='darkgrey', xlim=c(200,230))
-
-cs.1A = chip.sub(cs.guo, 'chr1A')
-points(cs.1A$chip$start/1E6, cs.1A$chip$count, pch=16,  col=rgb(red=1, green=0.2, blue=0.2, alpha=0.6))
-
-
-
-
-
-
-larry.1R = larry[larry$chr=='chr1R', ]
-larry.1R$count[larry.1R$count>25000] = NA
-tam112.1R = tam112[tam112$chr=='chr1R', ]
-tam112.1R$count[tam112.1R$count>10000] = NA
-
-
-plot(larry.1R$start/1E6, larry.1R$count, xlim=c(250,290), pch=16, col=rgb(red=0.2, green=1, blue=0.2, alpha=0.6), xlab='Chr1R (Mb)', ylab='bin count')
-
-
-
-
-points(tam112.1R$start/1E6, tam112.1R$count, pch=16, col=rgb(red=0.1, green=0.1, blue=1, alpha=0.4) )
 
 
 
