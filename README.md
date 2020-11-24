@@ -1,4 +1,4 @@
-# wheat centromere identification - 10+ Genomes Project
+# centromere identification - Wheat 10+Genomes Project
 analysis of wheat centromeres CENH3-ChIPseq
 
 
